@@ -190,7 +190,8 @@ with col1:
         value=0.0,
         min_value=-90.0,
         max_value=90.0,
-        format= "%.7f"
+        format= "%.7f",
+        key="latitude"
     )
 with col2:
     longitude = st.number_input(
@@ -198,7 +199,8 @@ with col2:
         value=0.0,
         min_value=-180.0,
         max_value=180.0,
-        format="%.7f"
+        format="%.7f",
+        key="longitude"
     )
 
 # -------------------------
@@ -212,13 +214,32 @@ predict = st.button(
 # -------------------------
 # Model
 # -------------------------
+
+if "forecast_data" not in st.session_state:
+    st.session_state.forecast_data = None
+
+if "forecast_latitude" not in st.session_state:
+    st.session_state.forecast_latitude = None
+
+if "forecast_longitude" not in st.session_state:
+    st.session_state.forecast_longitude = None
+
 if predict:
+    forecast = predict_temperature(latitude,longitude) ## Real Model(Model sent a dict to GUI)
+    st.session_state.forecast_data = forecast
+    st.session_state.forecast_latitude = latitude
+    st.session_state.forecast_longitude = longitude
+
     st.markdown(
         '<div class="second-title"> Temperature Forecast</div>',
         unsafe_allow_html=True
     )
+if st.session_state.forecast_data is not None:
 
-    
+    forecast = st.session_state.forecast_data
+    latitude = st.session_state.forecast_latitude
+    longitude = st.session_state.forecast_longitude
+
     # -------------------------
     # Location Card
     # -------------------------
@@ -226,8 +247,8 @@ if predict:
 <div class="card">
 <h3>Selected Location</h3>
 <p style="color:#94a3b8;">Forecast location</p>
-<p><strong>Latitude:</strong>{latitude}</p>
-<p><strong>Longitude:</strong>{longitude}</p>
+<p><strong>Latitude:</strong>{st.session_state.forecast_latitude}</p>
+<p><strong>Longitude:</strong>{st.session_state.forecast_longitude}</p>
 </div>
 """,unsafe_allow_html=True)
 
@@ -242,7 +263,7 @@ if predict:
     map_html = f"""
     <div class="card" style="padding:0; overflow:hidden;">
         <iframe
-            src="https://www.google.com/maps?q={latitude},{longitude}&z=19&output=embed"
+            src="https://www.google.com/maps?q={st.session_state.forecast_latitude},{st.session_state.forecast_longitude}&z=19&output=embed"
             width="100%"
             height="250"
             style="border:0; border-radius: 18px; display:block;"
@@ -262,7 +283,7 @@ if predict:
     satellite_html = f"""
     <div class="card" style="padding:0; overflow:hidden;">
         <iframe
-            src="https://www.google.com/maps?q={latitude},{longitude}&z=19&t=k&output=embed"
+            src="https://www.google.com/maps?q={st.session_state.forecast_latitude},{st.session_state.forecast_longitude}&z=19&t=k&output=embed"
             width="100%"
             height="250"
             style="border:0; border-radius: 18px; display:block;"
@@ -282,7 +303,7 @@ if predict:
     street_html = f"""
     <div class="card" style="padding:0; overflow:hidden;">
         <iframe
-            src="https://www.google.com/maps/embed?pb=!4v0!6m8!1m7!1sCAoSLEFGMVFpcE...!2m2!1d{latitude}!2d{longitude}!3f0!4f0!5f0.7820865974627469"
+            src="https://www.google.com/maps/embed?pb=!4v0!6m8!1m7!1sCAoSLEFGMVFpcE...!2m2!1d{st.session_state.forecast_latitude}!2d{st.session_state.forecast_longitude}!3f0!4f0!5f0.7820865974627469"
             width="100%"
             height="250"
             style="border:0; border-radius: 18px; display:block;"
@@ -296,7 +317,8 @@ if predict:
     # -------------------------
     # Forecast Card
     # -------------------------
-    forecast = predict_temperature(latitude,longitude) ## Real Model(Model sent a dict to GUI)
+    
+
     rows_html = ""
     for time, temperature in forecast.items():
             rows_html += f"""

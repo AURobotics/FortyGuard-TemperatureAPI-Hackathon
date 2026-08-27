@@ -103,6 +103,10 @@ st.markdown("""
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+latitude = st.session_state.get("latitude")
+longitude = st.session_state.get("longitude")
+forecast = st.session_state.get("forecast_data")    
+
 # -------------------------
 # Chat Container (Bordered Native Container)
 # -------------------------
