@@ -1,5 +1,5 @@
 def predict_temperature(latitude,longitude):
-    ## real model
+    ##REPLACE THAT WITH real model
 
     forecast = {
             "+2 hours" : "34.2 °C",
