@@ -1,5 +1,5 @@
 import streamlit as st 
-
+## WITHOUT INTEGRATION WITH REAL CHATBOT
 st.set_page_config(
     page_title="Heat Guardian (Chatbot)",
     page_icon="🤖",
