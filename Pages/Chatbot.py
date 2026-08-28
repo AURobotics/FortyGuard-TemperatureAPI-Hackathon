@@ -1,4 +1,6 @@
 import streamlit as st 
+import geopandas as gpd 
+from shapely.geometry import Point
 ## WITHOUT INTEGRATION WITH REAL CHATBOT
 st.set_page_config(
     page_title="Heat Guardian (Chatbot)",
@@ -6,6 +8,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+# -------------------------
+# USA 
+# -------------------------
+countries = gpd.read_file("ne_10m_admin_0_countries.shp")
+USA = countries[countries["ADMIN"] == "United States of America"]
 
 # -------------------------
 # Custom CSS
@@ -97,6 +104,55 @@ st.markdown("""
 </div>    
 """, unsafe_allow_html=True)
 
+# -------------------------
+# Loctaion Input
+# -------------------------
+st.markdown(
+    '<div class="second-title">Select Location</div>',
+    unsafe_allow_html=True
+)
+col1 , col2 = st.columns(2)
+with col1 :
+    latitude_input = st.number_input(
+        "Latitiude",
+        min_value=-90.0,
+        max_value=90.0,
+        format="%.7f",
+        key="chat_latitiude" 
+    )
+with col2 :
+    longitude_input = st.number_input(
+        "Longitude",
+        min_value=-180.0,
+        max_value=180.0,
+        format="%.7f",
+        key="chat_longitude" 
+    )
+
+# -------------------------
+# Confirm Location
+# -------------------------
+confirm_location = st.button(
+    "Confirm Location",
+    use_container_width=True
+)
+
+
+# -------------------------
+# USA Validation
+# -------------------------
+if confirm_location :
+    location = Point(longitude_input,latitude_input)
+    is_inside_usa = USA.geometry.covers(location).any()
+    if is_inside_usa:
+        st.success("Location is insied the USA")
+        st.session_state.latitude = latitude_input
+        st.session_state.longitude = longitude_input
+    else :
+        st.error("Please enter coordinates inside the USA")
+        st.session_state.latitude = None
+        st.session_state.longitude = None
+        
 # -------------------------
 # Chat History
 # -------------------------

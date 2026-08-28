@@ -1,7 +1,17 @@
 import streamlit as st 
-from model import predict_temperature
 import pandas as pd 
 import altair as alt
+import geopandas as gpd
+from shapely.geometry import Point,polygon
+
+# -------------------------
+# USA Coordinates
+# -------------------------
+countries = gpd.read_file("ne_10m_admin_0_countries.shp")
+USA = countries[countries["ADMIN"] == "United States of America"]
+test_point = Point(-74.0060, 40.7128)
+is_inside = USA.geometry.contains(test_point).any()
+print(is_inside)
 # -------------------------
 # Page Configration
 # -------------------------
@@ -95,7 +105,7 @@ st.markdown("""
     font-size: 2rem;
     font-weight: 900;
     border: none;
-    background: linear-gradient(
+    background: linear-gradient(ب
     90deg,
     #f97316
     
