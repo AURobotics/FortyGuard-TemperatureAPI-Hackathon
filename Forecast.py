@@ -2,16 +2,24 @@ import streamlit as st
 import pandas as pd 
 import altair as alt
 import geopandas as gpd
-from shapely.geometry import Point,polygon
+from shapely.geometry import Polygon
+import folium 
+from folium.plugins import Draw
+from streamlit_folium import st_folium
+from datetime import datetime, timedelta
+import json
+from Fortyguard import FortyGuardClient
+
+client = FortyGuardClient(
+    api_key="1f09e84c78a5b65ff648ce9e93b55cc6"
+)
 
 # -------------------------
 # USA Coordinates
 # -------------------------
 countries = gpd.read_file("ne_10m_admin_0_countries.shp")
 USA = countries[countries["ADMIN"] == "United States of America"]
-test_point = Point(-74.0060, 40.7128)
-is_inside = USA.geometry.contains(test_point).any()
-print(is_inside)
+
 # -------------------------
 # Page Configration
 # -------------------------
@@ -105,7 +113,7 @@ st.markdown("""
     font-size: 2rem;
     font-weight: 900;
     border: none;
-    background: linear-gradient(ب
+    background: linear-gradient(
     90deg,
     #f97316
     
@@ -168,8 +176,15 @@ st.markdown("""
     font-weight: 600;
     border-radius: 20px;
     }
+    
+
+    
     </style>
     """,unsafe_allow_html=True)
+
+
+
+    
 # -------------------------
 # Header
 # -------------------------
@@ -185,45 +200,7 @@ st.markdown("""
 </div>
 """,unsafe_allow_html=True)
 
-# -------------------------
-# Location Input
-# -------------------------
-st.markdown(
-    '<div class="second-title"> Select Location</div',
-    unsafe_allow_html=True
-)
 
-col1 , col2 = st.columns(2)
-with col1:
-    latitude = st.number_input(
-        "latitude (-90 , 90)",
-        value=0.0,
-        min_value=-90.0,
-        max_value=90.0,
-        format= "%.7f",
-        key="latitude"
-    )
-with col2:
-    longitude = st.number_input(
-        "longitude (-180,180)",
-        value=0.0,
-        min_value=-180.0,
-        max_value=180.0,
-        format="%.7f",
-        key="longitude"
-    )
-
-# -------------------------
-# Predict Button
-# -------------------------
-predict = st.button(
-    "🔮 Predict Temperature",
-    use_container_width=True
-)
-
-# -------------------------
-# Model
-# -------------------------
 
 if "forecast_data" not in st.session_state:
     st.session_state.forecast_data = None
@@ -234,148 +211,279 @@ if "forecast_latitude" not in st.session_state:
 if "forecast_longitude" not in st.session_state:
     st.session_state.forecast_longitude = None
 
+if "heatmap_data" not in st.session_state:
+    st.session_state.heatmap_data = None
+
+if "heat_polygon" not in st.session_state:
+    st.session_state.heatmap_polygon = None  
+
+if "heatmap_hours" not in st.session_state:
+    st.session_state.heatmap_hours = None 
+
+if "heatmap_granularity" not in st.session_state:
+    st.session_state.heatmap_granularity = None 
+
+if "heatmap_filter_type" not in st.session_state:
+    st.session_state.heatmap_filter_type = None
+
+# -------------------------
+# Select Polygon
+# -------------------------
+st.markdown(
+    '<div class="second-title"> Select Area</div',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    """
+    <div class="card">
+        <h3>Draw your area</h3>
+        <p style="color:"#cbd5e1;">
+            Draw a polygon on the map to select the area you want to analyze.
+        </p>
+    </div>        
+    """,
+    unsafe_allow_html=True
+)
+## create map
+map = folium.Map(
+    location = [40.7128,-74.0060],
+    zoom_start = 11,
+    tiles = "OpenStreetMap"
+)
+## Drawing
+Draw(
+    export=True,
+    draw_options={
+        "polyline":False,
+        "rectangle":False,
+        "circle":False,
+        "marker":False,
+        "circlemarker":False,
+        "polygon":True 
+    },
+    edit_options={
+        "edit":True,
+        "remove":True
+    }
+).add_to(map)
+##Display map
+map_data = st_folium(
+    map,
+    width=1200,
+    height=600,
+    key="polygon_map",
+    returned_objects=["last_active_drawing"]
+) 
+if map_data and map_data["last_active_drawing"] is not None:
+    selected_polygon = map_data["last_active_drawing"]
+    if selected_polygon["geometry"]["type"] == "Polygon":
+        st.session_state.heatmap_polygon = (
+            selected_polygon["geometry"]["coordinates"]
+            )
+
+
+# -------------------------
+# Get Saved Polygon
+# -------------------------
+predict = False
+
+if st.session_state.heatmap_polygon is not None:
+
+    coordinates = st.session_state.heatmap_polygon
+
+    st.markdown(
+        """
+        <div style="
+            background: rgba(15, 23, 42, 0.9);
+            color: #f8fafc;
+            padding: 12px 18px;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            font-weight: 700;
+            text-align: center;
+        ">
+            ✓ Polygon Selected Successfully
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    
+    with st.form("heatmap_form"):
+            st.markdown(
+                '<div class="second-title">Forecast time</div>'
+                ,unsafe_allow_html=True
+            )
+            st.markdown(
+            '<p style="color:#0f172a; font-size:1.2rem; font-weight:800;">'
+            'How many hours from now you want predict temperature?'
+            '</p>',
+            unsafe_allow_html=True
+            )
+            hours = st.slider(
+                "Forecast hours",
+                min_value= 1,
+                max_value=12,
+                value=1,
+                label_visibility="collapsed"
+            )
+            ## Granularity
+            st.markdown( '<p style="color:#0f172a; font-size:1.2rem; font-weight:800;">' \
+            '' 'Enter Heatmap Granularity (meters)' '</p>'
+            , unsafe_allow_html=True )
+            granularity = st.selectbox(
+                "Granularity",
+                options=[60,80,100],
+                index=2,
+                label_visibility="collapsed"
+            )
+            ## filter type
+            if hours == 1:
+                filter_type = 1
+            else :
+                filter_type = 2    
+
+            predict = st.form_submit_button(
+                "🌡️ Generate Heatmap",
+                use_container_width=True
+            )
+
+# -------------------------
+# Heatmap
+# -------------------------
 if predict:
-    forecast = predict_temperature(latitude,longitude) ## Real Model(Model sent a dict to GUI)
-    st.session_state.forecast_data = forecast
-    st.session_state.forecast_latitude = latitude
-    st.session_state.forecast_longitude = longitude
+    ## prepare polygon for API 
+    polygon_aoi = {
+        "type" : "Polygon",
+        "coordinates" : coordinates
+    }
+    ## Current Date & Time
+    now = datetime.now()
 
-    st.markdown(
-        '<div class="second-title"> Temperature Forecast</div>',
-        unsafe_allow_html=True
-    )
-if st.session_state.forecast_data is not None:
+    next_hour = now + timedelta(hours=1)
 
-    forecast = st.session_state.forecast_data
-    latitude = st.session_state.forecast_latitude
-    longitude = st.session_state.forecast_longitude
+    start_date = next_hour.strftime("%Y-%m-%d")
+    start_time = next_hour.strftime("%H:00")
 
-    # -------------------------
-    # Location Card
-    # -------------------------
-    st.markdown(f"""
-<div class="card">
-<h3>Selected Location</h3>
-<p style="color:#94a3b8;">Forecast location</p>
-<p><strong>Latitude:</strong>{st.session_state.forecast_latitude}</p>
-<p><strong>Longitude:</strong>{st.session_state.forecast_longitude}</p>
-</div>
-""",unsafe_allow_html=True)
+    end_datetime = next_hour + timedelta(hours=hours)
+    if hours == 1:
+        filter_type = 1
+        heatmap_response = client.create_heatmap(
+        polygon_aoi=polygon_aoi,
+        start_date=start_date,
+        start_time=start_time,
+        filter_type=filter_type,
+        granularity=granularity,
+        analytic_type="tcm",
+        verbose=False
+        )
+    else:
+        if end_datetime.date() == next_hour.date():
+            filter_type = 2
+            end_time = end_datetime.strftime("%H:00")
+
+            heatmap_response = client.create_heatmap(
+            polygon_aoi=polygon_aoi,
+            start_date=start_date,
+            start_time=start_time,
+            end_time=end_time,
+            filter_type=filter_type,
+            granularity=granularity,
+            analytic_type="tcm",
+            verbose=False
+            )
+        else:
+            filter_type = 4
+            end_date = end_datetime.strftime("%Y-%m-%d")
+            heatmap_response = client.create_heatmap(
+                polygon_aoi=polygon_aoi,
+                start_date=start_date,
+                end_date=end_date,
+                filter_type=filter_type,
+                granularity=granularity,
+                analytic_type="tcm",
+                verbose=False
+            )    
 
 
-    # -------------------------
-    # Map Card
-    # -------------------------
-    st.markdown(
-        '<div class="second-title">Site Location</div',
-        unsafe_allow_html=True
-    )
-    map_html = f"""
-    <div class="card" style="padding:0; overflow:hidden;">
-        <iframe
-            src="https://www.google.com/maps?q={st.session_state.forecast_latitude},{st.session_state.forecast_longitude}&z=19&output=embed"
-            width="100%"
-            height="250"
-            style="border:0; border-radius: 18px; display:block;"
-            loading="lazy"
-            allowfullscreen>
-        </iframe>
-    </div>
-    """   
-    st.markdown(map_html,unsafe_allow_html=True)
-    # -------------------------
-    # satellite Card 
-    # -------------------------
-    st.markdown(
-            '<div class="second-title">Satellite View</div',
+    st.session_state.heatmap_data = heatmap_response
+    st.session_state.heatmap_polygon = coordinates
+    st.session_state.heatmap_hours = hours
+    st.session_state.heatmap_granularity = granularity
+    st.session_state.heatmap_filter_type = filter_type
+
+if (
+    st.session_state.heatmap_data is not None
+    and st.session_state.heatmap_polygon is not None
+):
+    result = st.session_state.heatmap_data.get("result",{})
+    map_data = result.get("map_data")
+    if map_data and map_data.get("features"):
+        st.markdown(
+            '<div class="second-title">Temperature Heatmap</div>',
             unsafe_allow_html=True
         )
-    satellite_html = f"""
-    <div class="card" style="padding:0; overflow:hidden;">
-        <iframe
-            src="https://www.google.com/maps?q={st.session_state.forecast_latitude},{st.session_state.forecast_longitude}&z=19&t=k&output=embed"
-            width="100%"
-            height="250"
-            style="border:0; border-radius: 18px; display:block;"
-            loading="lazy"
-            allowfullscreen>
-        </iframe>
-    </div>
-    """
-    st.markdown(satellite_html,unsafe_allow_html=True)
 
-    # -------------------------
-    # satellite Card 
-    # -------------------------
-    st.markdown(
-            '<div class="second-title">Street View</div',
-                unsafe_allow_html=True)
-    street_html = f"""
-    <div class="card" style="padding:0; overflow:hidden;">
-        <iframe
-            src="https://www.google.com/maps/embed?pb=!4v0!6m8!1m7!1sCAoSLEFGMVFpcE...!2m2!1d{st.session_state.forecast_latitude}!2d{st.session_state.forecast_longitude}!3f0!4f0!5f0.7820865974627469"
-            width="100%"
-            height="250"
-            style="border:0; border-radius: 18px; display:block;"
-            loading="lazy"
-            allowfullscreen>
-        </iframe>
-    </div>
-    """
-    st.markdown(street_html,unsafe_allow_html=True)
+        first_point = st.session_state.heatmap_polygon[0][0]
+        heatmap_map = folium.Map(
+            location=[first_point[1],first_point[0]],
+            zoom_start=12,
+            tiles="OpenStreetMap"
+        )
+        temperatures = []
+        for feature in map_data["features"]:
+            temp = feature["properties"].get("average_temperature")
+            if temp is not None:
+                temperatures.append(temp)
+        if temperatures:
+            min_temp = min(temperatures)
+            max_temp = max(temperatures)
 
-    # -------------------------
-    # Forecast Card
-    # -------------------------
-    
+            def style_heatmap(feature):
+                temp = feature["properties"].get(
+                    "average_temperature",
+                    min_temp
+                )        
+                if max_temp == min_temp:
+                    fraction = 0
+                else :
+                    fraction = (
+                        temp - min_temp
+                    ) / (max_temp-min_temp)
 
-    rows_html = ""
-    for time, temperature in forecast.items():
-            rows_html += f"""
-    <div class="forecast-row">
-        <span class="forecast-time">{time}</span>
-        <span class="forecast-temp">{temperature}</span>
-    </div>
-    """    
-    st.markdown(f"""
-    <div class="forecast-card">
-    <h3>Forecast</h3>
-    {rows_html}
-    </div>
-    """,unsafe_allow_html=True)
+                red = int(255 * fraction)
+                blue = int(255 * (1-fraction))
+                return {
+                    "fillColor": f"#{red:02x}00{blue:02x}",
+                    "color": "#00000000",
+                    "weight": 0,
+                    "fillOpacity": 0.7
+                } 
+            folium.GeoJson(
+                        map_data,
+                        style_function=style_heatmap,
+                        tooltip=folium.GeoJsonTooltip( 
+                            fields=[ "tile_id",
+                                    "average_temperature",
+                                    "min_temperature",
+                                    "max_temperature" ],
+                                    aliases=[ 
+                                        "Tile",
+                                        "Average Temperature",
+                                        "Minimum Temperature",
+                                        "Maximum Temperature" ],
+                                        localize=True ) ).add_to(heatmap_map)
+            st_folium(
+                heatmap_map,
+                width=1200,
+                height=600,
+                key="temperature_heatmap" ,
+                returned_objects=[]
+                ) 
+        else: 
+            st.error("No heatmap data was returned from FortyGuard.")
 
-    # -------------------------
-    # Temperature History
-    # -------------------------                
-    st.markdown(
-        '<div class="second-title">Temperature History</div>',
-        unsafe_allow_html=True
-    )
-    history_df = pd.DataFrame(
-        list(forecast.items()),
-        columns=["time","temperature"]
-    )
 
-    history_df["temp_val"] = history_df["temperature"].str.replace(" °C","").astype(float)
-    base = alt.Chart(history_df).encode(
-        x = alt.X("time",title="Time",sort=None,
-                axis=alt.Axis(labelFontSize=16,titleFontSize=20,grid=True,
-                        gridColor="rgba(148,163,184,0.25)",gridDash=[4,4])),
 
-        y = alt.Y("temp_val:Q",title="Temperature (°C)",
-                axis=alt.Axis(labelFontSize=16,titleFontSize=20,grid=True,
-                        gridColor="rgba(148,163,184,0.25)",gridDash=[4,4]))
-    )
-    line = base.mark_line(color="#fb923c",strokeWidth=0.5)
-    points = base.mark_circle(size=100,color="#fb923c")
-    chart = (line + points).properties(
-        height=350
-    ).configure_view(
-        strokeWidth=0
-    ).configure_axis(
-        labelColor="#cbd5e1",
-        titleColor="#e2e8f0",
-        gridColor="rgba(148,163,184,0.1)"
-    )
-    st.altair_chart(chart,use_container_width=True)
 
